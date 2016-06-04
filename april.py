@@ -2,25 +2,34 @@
 def distance(p1, p2):
     return p1[0] - p2[0]**2 + (p1[1] + p2[1])**2
 
+def hasBlackOutline(tag):
+    numWhite = sum(tag[0, :]) + sum(tag[-1, :]) + sum(tag[:, 0]) + sum(tag[:,-1])
+    return numWhite < 4
+
 from cv2 import *
-from numpy import std, asarray, reshape, float32
+import numpy as np
+
+seenTags = 0
+tagMap = {}
 
 cap = VideoCapture(1)
 
-rectifyPoints = asarray([[0, 0], [0, 100], [100, 100], [100, 0]], dtype=float32)
-print(rectifyPoints.dtype)
+cap.set(CAP_PROP_FRAME_WIDTH,1920);
+cap.set(CAP_PROP_FRAME_HEIGHT,1080);
+
+rectifyPoints = np.asarray([[0, 0], [0, 100], [100, 100], [100, 0]], dtype=np.float32)
 
 while True:
     _, frame = cap.read()
 
 
     gray = cvtColor(frame, COLOR_BGR2GRAY)
-    gray = GaussianBlur(gray, (5,5), 0)
+    gray = GaussianBlur(gray, (3,3), 0)
     #_, thresh = threshold(gray,50,255,0)
     canny = Canny(gray, 50, 100)
-    _, contours, _ = findContours(canny, RETR_LIST, CHAIN_APPROX_SIMPLE)
+    _, contours, _ = findContours(canny, RETR_EXTERNAL, CHAIN_APPROX_SIMPLE)
 
-    drawContours(frame, contours, -1, (0, 255, 255), 2)
+    #drawContours(frame, contours, -1, (0, 255, 255), 2)
 
     for contour in contours:
         #arc = arcLength(contour, True)
@@ -29,7 +38,7 @@ while True:
 
         area = contourArea(contour)
         if area > 1000:
-            poly = approxPolyDP(contour, arcLength(contour, True)*0.03, True)
+            poly = approxPolyDP(contour, arcLength(contour, True)*0.1, True)
             if len(poly) == 4 and isContourConvex(poly):
                 #print(poly[0])
                 """
@@ -45,16 +54,32 @@ while True:
                 #affinity = (lengths[0] - lengths[2]) ** 2 + (lengths[1] - lengths[3]) ** 2
                 #print(affinity)
                 #if affinity < 40000000000:
-                drawContours(frame, [poly], 0, (255, 255, 0), 2)
 
-                poly = asarray(poly, dtype=float32)
-                poly.reshape(2, 4)
-                transform = getPerspectiveTransform(poly, rectifyPoints)
+                ndpoly = np.asarray(poly, dtype=np.float32)
+                ndpoly.reshape(2, 4)
+                transform = getPerspectiveTransform(ndpoly, rectifyPoints)
                 april = warpPerspective(gray, transform, (100, 100))
                 #_, april = threshold(april)
                 _, april = threshold(april, 0, 255, THRESH_BINARY+THRESH_OTSU)
-                imshow('april', resize(april, (8, 8)))
-                break
+                april = resize(april, (8,8))
 
-    imshow('frame', frame)
+                if hasBlackOutline(april):
+                    drawContours(frame, [poly], 0, (255, 255, 0), 2)
+
+                    tagId = 0
+
+                    for i, value in enumerate(np.nditer(april[1:7, 1:7])):
+                        tagId = (tagId << i) | (1 if value > 230 else 0)
+
+                    if tagId not in tagMap:
+                        tagMap[tagId] = seenTags
+                        seenTags += 1
+
+                    centroid = np.ravel(np.sum(ndpoly, axis=0)/4)
+                    putText(frame, str(tagMap[tagId]), tuple(centroid), FONT_HERSHEY_SIMPLEX, 2, (0, 255, 255))
+
+                    imshow('april', april)
+                #break
+
+    imshow('frame', resize(frame, (1070, 600)))
     waitKey(1)
