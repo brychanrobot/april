@@ -26,18 +26,21 @@ while True:
     gray = cvtColor(frame, COLOR_BGR2GRAY)
     gray = GaussianBlur(gray, (3,3), 0)
     #_, thresh = threshold(gray,50,255,0)
-    canny = Canny(gray, 50, 100)
-    _, contours, _ = findContours(canny, RETR_EXTERNAL, CHAIN_APPROX_SIMPLE)
+    canny = Canny(gray, 50, 250)
+    _, contours, hierarchy = findContours(canny, RETR_TREE, CHAIN_APPROX_SIMPLE)
 
     #drawContours(frame, contours, -1, (0, 255, 255), 2)
+    acceptedContours = []
 
-    for contour in contours:
+    for c, contour in enumerate(contours):
         #arc = arcLength(contour, True)
         #and abs((arc/4)**2 - area) < 100
         #convex = convexHull(contour)
+        if hierarchy[0][c][3] in acceptedContours:
+            continue
 
         area = contourArea(contour)
-        if area > 1000:
+        if area > 700:
             poly = approxPolyDP(contour, arcLength(contour, True)*0.1, True)
             if len(poly) == 4 and isContourConvex(poly):
                 #print(poly[0])
@@ -75,11 +78,13 @@ while True:
                         tagMap[tagId] = seenTags
                         seenTags += 1
 
+                    acceptedContours.append(c)
+
                     centroid = np.ravel(np.sum(ndpoly, axis=0)/4)
                     putText(frame, str(tagMap[tagId]), tuple(centroid), FONT_HERSHEY_SIMPLEX, 2, (0, 255, 255))
 
                     imshow('april', april)
                 #break
 
-    imshow('frame', resize(frame, (1070, 600)))
+    imshow('frame', frame)
     waitKey(1)
